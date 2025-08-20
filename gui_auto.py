@@ -165,7 +165,7 @@ def find_and_click(
 
             time.sleep(max(0.0, retry_ms / 1000.0))
 
-    print("[info] No image matched within timeout.")
+    print("[debug] No image matched within timeout.")
     return False
 
 
@@ -254,6 +254,7 @@ def show_toast(
     duration_ms: int = 800,
     bg: str = "#333333",
     fg: str = "#ffffff",
+    wraplength: int = 460,
 ) -> None:
     win = tk.Toplevel(root)
     win.overrideredirect(True)
@@ -264,7 +265,17 @@ def show_toast(
         pass
     frame = ttk.Frame(win, padding=(8, 6))
     frame.pack(fill=tk.BOTH, expand=True)
-    label = tk.Label(frame, text=text, font=("Segoe UI", 10, "bold"), bg=bg, fg=fg, padx=10, pady=6)
+    label = tk.Label(
+        frame,
+        text=text,
+        font=("Segoe UI", 10, "bold"),
+        bg=bg,
+        fg=fg,
+        padx=10,
+        pady=6,
+        wraplength=wraplength,
+        justify="left",
+    )
     label.pack()
 
     # Position near top-right of current monitor
@@ -319,7 +330,7 @@ def _show_start_instructions(root: tk.Tk, monitors: List[Dict[str, int]]) -> Non
         "Kısayollar: F8 = HUD, Ctrl+Shift+C = Koordinat kopyala, ESC = Çıkış\n"
         "Sürekli arama aktif. Eşleşme sonrası 'y' gönderilir ve 3 sn beklenir."
     )
-    show_toast(root, monitors, msg, duration_ms=3500)
+    show_toast(root, monitors, msg, duration_ms=8000)
 
 def main() -> None:
     # Config: adjust as needed or pass image names via argv
@@ -356,7 +367,7 @@ def main() -> None:
                     time.sleep(0.05)
             else:
                 if first_run:
-                    _alert_not_found(root, monitors)
+                    root.after(0, lambda: _alert_not_found(root, monitors))
                 # Small breather between cycles
                 time.sleep(0.05)
             first_run = False
@@ -365,8 +376,8 @@ def main() -> None:
     worker.start()
 
     # Hotkeys
-    keyboard.on_press_key("f8", lambda e: hud.show())
-    keyboard.on_release_key("f8", lambda e: hud.hide())
+    keyboard.on_press_key("f8", lambda e: root.after(0, hud.show))
+    keyboard.on_release_key("f8", lambda e: root.after(0, hud.hide))
 
     def _copy_coords() -> None:
         try:
@@ -377,7 +388,7 @@ def main() -> None:
         except Exception as e:
             show_toast(root, monitors, f"Copy failed: {e}", bg="#bb2222")
 
-    keyboard.add_hotkey("ctrl+shift+c", _copy_coords)
+    keyboard.add_hotkey("ctrl+shift+c", lambda: root.after(0, _copy_coords))
 
     # Safe shutdown on ESC
     def _on_exit() -> None:
@@ -408,16 +419,6 @@ def main() -> None:
     _show_start_instructions(root, monitors)
     print("Ready. Continuous search running.")
     print("Press F8 to show mouse coords; Ctrl+Shift+C to copy coords; ESC to quit.")
-
-    # Optional: run a watcher thread that calls keyboard.wait('esc') so we also exit when it triggers
-    def _waiter():
-        try:
-            keyboard.wait("esc")
-        except Exception:
-            pass
-
-    t = threading.Thread(target=_waiter, name="kb-wait", daemon=True)
-    t.start()
 
     # Enter Tk event loop (non-blocking for hotkey handlers)
     try:
