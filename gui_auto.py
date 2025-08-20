@@ -314,6 +314,13 @@ def _alert_not_found(root: tk.Tk, monitors: List[Dict[str, int]]) -> None:
 # Hotkey handlers and main
 # -------------------------------
 
+def _show_start_instructions(root: tk.Tk, monitors: List[Dict[str, int]]) -> None:
+    msg = (
+        "Kısayollar: F8 = HUD, Ctrl+Shift+C = Koordinat kopyala, ESC = Çıkış\n"
+        "Sürekli arama aktif. Eşleşme sonrası 'y' gönderilir ve 3 sn beklenir."
+    )
+    show_toast(root, monitors, msg, duration_ms=3500)
+
 def main() -> None:
     # Config: adjust as needed or pass image names via argv
     # Example usage: python gui_auto.py accept_green.png accept_green-2.png
@@ -328,14 +335,34 @@ def main() -> None:
         print("[error] No monitors detected via MSS.")
         return
 
-    # Initial search attempt
-    found = find_and_click(images_to_search, threshold, retry_ms, timeout_ms)
-
     # Tkinter root (runs in main thread)
     root = tk.Tk()
     root.withdraw()  # Keep hidden; HUD/Toast are Toplevels
 
     hud = Hud(root, monitors)
+
+    # Background worker: continuous search with cooldown after 'y'
+    stop_event = threading.Event()
+
+    def _runner() -> None:
+        first_run = True
+        while not stop_event.is_set():
+            found_local = find_and_click(images_to_search, threshold, retry_ms, timeout_ms)
+            if found_local:
+                # Cooldown to prevent rapid repeats
+                print("[cooldown] Sleeping 3.0s after sending 'y'")
+                t_end = time.monotonic() + 3.0
+                while time.monotonic() < t_end and not stop_event.is_set():
+                    time.sleep(0.05)
+            else:
+                if first_run:
+                    _alert_not_found(root, monitors)
+                # Small breather between cycles
+                time.sleep(0.05)
+            first_run = False
+
+    worker = threading.Thread(target=_runner, name="finder", daemon=True)
+    worker.start()
 
     # Hotkeys
     keyboard.on_press_key("f8", lambda e: hud.show())
@@ -358,6 +385,10 @@ def main() -> None:
             hud.hide()
         finally:
             try:
+                stop_event.set()
+            except Exception:
+                pass
+            try:
                 root.quit()
             except Exception:
                 pass
@@ -373,13 +404,10 @@ def main() -> None:
 
     keyboard.add_hotkey("esc", _on_exit)
 
-    # If not found, alert user
-    if not found:
-        _alert_not_found(root, monitors)
-
-    print(
-        "Done. Press F8 to show mouse coords; Ctrl+Shift+C to copy coords; ESC to quit."
-    )
+    # Show startup instructions and print usage
+    _show_start_instructions(root, monitors)
+    print("Ready. Continuous search running.")
+    print("Press F8 to show mouse coords; Ctrl+Shift+C to copy coords; ESC to quit.")
 
     # Optional: run a watcher thread that calls keyboard.wait('esc') so we also exit when it triggers
     def _waiter():
