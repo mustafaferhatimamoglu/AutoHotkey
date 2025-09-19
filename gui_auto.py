@@ -335,7 +335,7 @@ def _show_start_instructions(root: tk.Tk, monitors: List[Dict[str, int]]) -> Non
 def main() -> None:
     # Config: adjust as needed or pass image names via argv
     # Example usage: python gui_auto.py accept_green.png accept_green-2.png
-    images_to_search: List[str] = sys.argv[1:] or ["accept_green.png", "accept_green-2.png", "accept_green-3.png","Codex_wants_to_run.png"]
+    images_to_search: List[str] = sys.argv[1:] or ["accept_green.png", "accept_green-2.png", "accept_green-3.png", "accept_green-4.png","Codex_wants_to_run.png"]
     threshold: float = 0.85
     retry_ms: int = 120
     timeout_ms: int = 6000
